@@ -1,201 +1,119 @@
-import pandas as pd
 import streamlit as st
+import pandas as pd
 
-st.set_page_config(
-    page_title="Extrator de Leads - CNPJ", page_icon="🎯", layout="centered"
-)
+st.set_page_config(page_title="Extrator de Leads - Receita Federal", page_icon="🎯", layout="wide")
 
 st.title("🎯 Extrator de Leads — Receita Federal")
-st.write(
-    "Carregue o arquivo de Estabelecimentos da Receita e filtre os leads facilmente."
-)
+st.markdown("Carregue o arquivo de Estabelecimentos da Receita e filtre os leads por Estado, Cidade e CNAE (código ou nome do segmento).")
 
-# Lista completa de todos os estados do Brasil + Distrito Federal
-TODAS_UFS = [
-    "TODOS (BR)",
-    "AC",
-    "AL",
-    "AM",
-    "AP",
-    "BA",
-    "CE",
-    "DF",
-    "ES",
-    "GO",
-    "MA",
-    "MG",
-    "MS",
-    "MT",
-    "PA",
-    "PB",
-    "PE",
-    "PI",
-    "PR",
-    "RJ",
-    "RN",
-    "RO",
-    "RR",
-    "RS",
-    "SC",
-    "SE",
-    "SP",
-    "TO",
-]
-
-# Dicionário com lista de segmentos comuns
-SEGMENTOS = {
-    "imobiliarias": ["6821801", "6821802"],
-    "agencias_marketing": ["7311400", "7312200"],
-    "clinicas_odontologicas": ["8630504"],
-    "clinicas_medicas": ["8630501", "8630502", "8630503"],
-    "academias": ["9313100"],
-    "restaurantes": ["5611201", "5611203"],
-    "saloes_beleza": ["9602501", "9602502"],
-    "contabilidade": ["6920601"],
-    "advocacia": ["6911701"],
-    "escolas": ["8513900", "8520100"],
-    "farmacias": ["4771701"],
-    "autoescolas": ["8599601"],
-    "petshops": ["9609208", "4789004"],
-    "energia_solar": ["4321500", "7112000"],
-    "Outro (Digitar código CNAE)": ["OUTRO"],
+# Dicionário de tradução de CNAEs
+CNAE_DESCRICOES = {
+    "6201500": "Desenvolvimento de programas de computador sob encomenda",
+    "6202300": "Desenvolvimento e licenciamento de programas de computador customizáveis",
+    "6209100": "Suporte técnico, manutenção e outros serviços em tecnologia da informação",
+    "7311400": "Agências de publicidade",
+    "7319002": "Promoção de vendas",
+    "7319003": "Marketing direto",
+    "7020400": "Atividades de consultoria em gestão empresarial",
+    "8599604": "Treinamento em desenvolvimento profissional e gerencial",
+    "4711301": "Hipermercados",
+    "4711302": "Supermercados",
+    "5611201": "Restaurantes e similares",
+    "5611203": "Lanchonetes, casas de chá, de sucos e similares",
+    "4771701": "Comércio varejista de produtos farmacêuticos, sem manipulação de fórmulas",
+    "9602501": "Cabeleireiros, manicure e pedicure",
+    "4120400": "Construção de edifícios",
+    "6821801": "Corretagem na compra e venda e avaliação de imóveis",
+    "8630503": "Atividade médica ambulatorial restrita a consultas",
+    "6911701": "Atividades advocatícias",
+    "6920601": "Atividades de contabilidade",
 }
 
-uploaded_file = st.file_uploader(
-    "Selecione o arquivo extraído (ex: .ESTABELE ou .csv)",
-    type=["ESTABELE", "csv", "txt"],
-)
+# Upload do arquivo
+uploaded_file = st.file_uploader("Selecione o arquivo extraído (ex: .ESTABELE ou .csv)", type=["ESTABELE", "csv", "txt"])
 
 if uploaded_file is not None:
-    st.success("Arquivo carregado com sucesso!")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        uf_selecionada = st.selectbox("Selecione o Estado (UF):", TODAS_UFS)
-
-    with col2:
-        segmento_selecionado = st.selectbox(
-            "Selecione o Segmento:", list(SEGMENTOS.keys())
+    st.success("Arquivo carregado com sucesso! Configure seus filtros abaixo:")
+    
+    columns = [
+        "CNPJ_BASICO", "CNPJ_ORDEM", "CNPJ_DV", "IDENTIFICADOR_MATRIZ_FILIAL", 
+        "NOME_FANTASIA", "SITUACAO_CADASTRAL", "DATA_SITUACAO_CADASTRAL", 
+        "MOTIVO_SITUACAO_CADASTRAL", "NOME_CIDADE_EXTERIOR", "PAIS", 
+        "DATA_INICIO_ATIVIDADE", "CNAE_FISCAL_PRINCIPAL", "CNAE_FISCAL_SECUNDARIA", 
+        "TIPO_LOGRADOURO", "LOGRADOURO", "NUMERO", "COMPLEMENTO", "BAIRRO", 
+        "CEP", "UF", "MUNICIPIO", "DDD_1", "TELEFONE_1", "DDD_2", "TELEFONE_2", 
+        "DDD_FAX", "FAX", "CORREIO_ELETRONICO", "SITUACAO_ESPECIAL", "DATA_SITUACAO_ESPECIAL"
+    ]
+    
+    try:
+        # Leitura em blocos para economizar memória
+        df = pd.read_csv(
+            uploaded_file, 
+            sep=";", 
+            header=None, 
+            names=columns, 
+            dtype=str, 
+            encoding="latin1",
+            on_bad_lines="skip"
         )
-
-    # Campo extra que aparece apenas se escolher "Outro"
-    cnae_customizado = ""
-    if segmento_selecionado == "Outro (Digitar código CNAE)":
-        cnae_customizado = st.text_input(
-            "Digite o CNAE desejado (apenas números, ex: 4711301):"
+        
+        # Filtro fixo: Apenas Empresas Ativas (02)
+        df_ativa = df[df["SITUACAO_CADASTRAL"] == "02"].copy()
+        
+        # Adiciona a Tradução do CNAE na base antes de filtrar
+        df_ativa["DESCRICAO_CNAE"] = df_ativa["CNAE_FISCAL_PRINCIPAL"].map(
+            lambda x: CNAE_DESCRICOES.get(str(x), "Outros / CNAE não mapeado")
         )
-
-    if st.button("🚀 Extrair Leads", type="primary"):
-        # Define quais CNAEs serão usados
-        if segmento_selecionado == "Outro (Digitar código CNAE)":
-            cnae_limpo = (
-                cnae_customizado.replace(".", "")
-                .replace("-", "")
-                .replace("/", "")
-                .strip()
-            )
-            if not cnae_limpo:
-                st.error("Por favor, digite um código CNAE válido.")
-                st.stop()
-            cnaes_alvo = [cnae_limpo]
-        else:
-            cnaes_alvo = SEGMENTOS[segmento_selecionado]
-
-        with st.spinner("Processando e filtrando os dados... Aguarde."):
-            colunas = [
-                "cnpj_basico",
-                "cnpj_ordem",
-                "cnpj_dv",
-                "identificador",
-                "nome_fantasia",
-                "situacao_cadastral",
-                "data_situacao",
-                "motivo",
-                "nm_cidade_exterior",
-                "pais",
-                "dt_inicio_atividade",
-                "cnae_fiscal_principal",
-                "cnae_fiscal_secundaria",
-                "tipo_logradouro",
-                "logradouro",
-                "numero",
-                "complemento",
-                "bairro",
-                "cep",
-                "uf",
-                "municipio",
-                "ddd_1",
-                "telefone_1",
-                "ddd_2",
-                "telefone_2",
-                "ddd_fax",
-                "fax",
-                "email",
-                "situacao_especial",
-                "data_situacao_especial",
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            ufs_disponiveis = sorted(df_ativa["UF"].dropna().unique().tolist())
+            uf_selecionada = st.selectbox("1. Selecione o Estado (UF):", ["Todos"] + ufs_disponiveis)
+            
+        with col2:
+            cidade_busca = st.text_input("2. Filtrar Cidade (Nome ou Código):", placeholder="Ex: Campo Grande ou código").strip()
+            
+        with col3:
+            cnae_busca = st.text_input("3. Filtrar CNAE (Código ou Nome da Atividade):", placeholder="Ex: 6201500 ou Software / Restaurante").strip()
+            
+        # Aplicação dos filtros
+        df_filtrado = df_ativa.copy()
+        
+        if uf_selecionada != "Todos":
+            df_filtrado = df_filtrado[df_filtrado["UF"] == uf_selecionada]
+            
+        if cidade_busca:
+            df_filtrado = df_filtrado[
+                df_filtrado["MUNICIPIO"].astype(str).str.contains(cidade_busca, case=False, na=False)
             ]
-
-            chunks = []
-            for chunk in pd.read_csv(
-                uploaded_file,
-                sep=";",
-                header=None,
-                names=colunas,
-                dtype=str,
-                encoding="latin1",
-                chunksize=50000,
-            ):
-
-                # Filtrar apenas empresas ATIVAS (situação 02)
-                chunk = chunk[chunk["situacao_cadastral"] == "02"]
-
-                # Filtrar pelo CNAE desejado
-                chunk = chunk[chunk["cnae_fiscal_principal"].isin(cnaes_alvo)]
-
-                # Filtrar pelo Estado selecionado (se não for BR inteiro)
-                if uf_selecionada != "TODOS (BR)":
-                    chunk = chunk[chunk["uf"] == uf_selecionada]
-
-                chunks.append(chunk)
-
-            if chunks:
-                df_final = pd.concat(chunks, ignore_index=True)
-
-                if not df_final.empty:
-                    st.balloons()
-                    st.success(
-                        f"Encontrados **{len(df_final)}** leads ativos!"
-                    )
-
-                    # Exibir prévia na tela
-                    st.dataframe(
-                        df_final[
-                            [
-                                "cnpj_basico",
-                                "nome_fantasia",
-                                "uf",
-                                "email",
-                                "telefone_1",
-                            ]
-                        ].head(10)
-                    )
-
-                    # Botão para baixar planilha pronta
-                    csv = df_final.to_csv(index=False, sep=";").encode(
-                        "utf-8-sig"
-                    )
-                    st.download_button(
-                        label="📥 Baixar Planilha de Leads (CSV)",
-                        data=csv,
-                        file_name=f"leads_{segmento_selecionado}_{uf_selecionada}.csv",
-                        mime="text/csv",
-                    )
-                else:
-                    st.warning(
-                        "Nenhum lead encontrado com os filtros selecionados."
-                    )
-            else:
-                st.warning(
-                    "Nenhum resultado retornado. Verifique o arquivo enviado."
-                )
+            
+        if cnae_busca:
+            # Busca tanto no código quanto na descrição traduzida
+            df_filtrado = df_filtrado[
+                df_filtrado["CNAE_FISCAL_PRINCIPAL"].astype(str).str.contains(cnae_busca, case=False, na=False) |
+                df_filtrado["DESCRICAO_CNAE"].astype(str).str.contains(cnae_busca, case=False, na=False)
+            ]
+            
+        st.subheader(f"Resultados encontrados: {len(df_filtrado)} leads ativas")
+        
+        # Exibe prévia das colunas
+        colunas_exibicao = [
+            "CNPJ_BASICO", "NOME_FANTASIA", "UF", "MUNICIPIO", 
+            "CNAE_FISCAL_PRINCIPAL", "DESCRICAO_CNAE", "DDD_1", "TELEFONE_1", "CORREIO_ELETRONICO"
+        ]
+        
+        cols_presentes = [c for c in colunas_exibicao if c in df_filtrado.columns]
+        st.dataframe(df_filtrado[cols_presentes].head(50))
+        
+        # Botão para baixar CSV
+        csv_data = df_filtrado.to_csv(index=False, sep=";", encoding="utf-8-sig")
+        st.download_button(
+            label="📥 Baixar Planilha de Leads (CSV)",
+            data=csv_data,
+            file_name="leads_extraidos.csv",
+            mime="text/csv"
+        )
+        
+    except Exception as e:
+        st.error(f"Erro ao processar o arquivo: {e}")
