@@ -12,7 +12,47 @@ st.set_page_config(
 # Estilização CSS para recriar o tema claro/pro da Imagem 2
 st.markdown("""
 <style>
-    .stApp { background-color: #F4F7FA; color: #1E293B; }
+    /* Fundo Geral */
+    .stApp { background-color: #F8FAFC; color: #0F172A; }
+    
+    /* Forçar Inputs, Selects e Uploader para Fundo Branco e Texto Escuro */
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="select"] > div,
+    div[data-testid="stTextInput"] input,
+    div[data-testid="stDateInput"] input {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 6px !important;
+    }
+
+    /* Rótulos/Labels das Caixas de Texto para contraste alto */
+    label, p, span {
+        color: #1E293B !important;
+        font-weight: 600;
+    }
+
+    /* Container de Upload Claro */
+    [data-testid="stFileUploader"] {
+        background-color: #FFFFFF !important;
+        border: 1px dashed #94A3B8 !important;
+        border-radius: 8px !important;
+        padding: 10px !important;
+    }
+
+    /* Cards de Métricas Topo */
+    .metric-card {
+        background-color: #FFFFFF;
+        padding: 16px;
+        border-radius: 10px;
+        border: 1px solid #E2E8F0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .metric-title { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+    .metric-value { font-size: 24px; font-weight: 800; color: #0F172A; margin: 4px 0; }
+    .metric-sub { font-size: 12px; color: #10B981; font-weight: 600; }
+</style>
+""", unsafe_allow_html=True)
     
     /* Cards de Métricas Topo */
     .metric-card {
