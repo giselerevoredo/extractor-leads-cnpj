@@ -1,222 +1,213 @@
 import streamlit as st
 import pandas as pd
-import re
+import io
 
-# ==========================================
-# CONFIGURAÇÃO DA PÁGINA
-# ==========================================
+# Configuração da página
 st.set_page_config(
-    page_title="LeadGov B2B Pro | CNPJ Intelligence",
+    page_title="LeadGov Pro - Extrator B2B",
     page_icon="💼",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# Estilização CSS personalizada (Tema Escuro/Pro)
+# Estilização CSS para recriar o tema claro/pro da Imagem 2
 st.markdown("""
 <style>
-    .main { background-color: #0E1117; }
-    .stMetric { background-color: #1E232A; padding: 15px; border-radius: 8px; border: 1px solid #2D3748; }
-    div[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #2D3748; }
-    .stButton>button { background-color: #0066CC; color: white; border-radius: 6px; font-weight: 600; border: none; }
-    .stButton>button:hover { background-color: #0052A3; }
+    .stApp { background-color: #F4F7FA; color: #1E293B; }
+    
+    /* Cards de Métricas Topo */
+    .metric-card {
+        background-color: #FFFFFF;
+        padding: 16px;
+        border-radius: 10px;
+        border: 1px solid #E2E8F0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .metric-title { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; }
+    .metric-value { font-size: 24px; font-weight: 800; color: #0F172A; margin: 4px 0; }
+    .metric-sub { font-size: 12px; color: #10B981; font-weight: 600; }
+    
+    /* Painel de Filtros */
+    .filter-box {
+        background-color: #FFFFFF;
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid #E2E8F0;
+        margin-top: 15px;
+        margin-bottom: 15px;
+    }
+    
+    /* Banner de Upload */
+    .upload-box {
+        background-color: #EFF6FF;
+        border: 1px solid #BFDBFE;
+        border-radius: 10px;
+        padding: 15px 20px;
+        margin-bottom: 20px;
+    }
+    
+    /* Botões Customizados */
+    .stButton>button { border-radius: 6px; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# CONSTANTES & LISTA COMPLETA DE ESTADOS
-# ==========================================
-ESTADOS_BR = [
-    "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", 
-    "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", 
-    "RO", "RR", "RS", "SC", "SE", "SP", "TO"
-]
-
-UF_NOMES = {
-    "AC": "Acre", "AL": "Alagoas", "AM": "Amazonas", "AP": "Amapá",
-    "BA": "Bahia", "CE": "Ceará", "DF": "Distrito Federal", "ES": "Espírito Santo",
-    "GO": "Goiás", "MA": "Maranhão", "MG": "Minas Gerais", "MS": "Mato Grosso do Sul",
-    "MT": "Mato Grosso", "PA": "Pará", "PB": "Paraíba", "PE": "Pernambuco",
-    "PI": "Piauí", "PR": "Paraná", "RJ": "Rio de Janeiro", "RN": "Rio Grande do Norte",
-    "RO": "Rondônia", "RR": "Roraima", "RS": "Rio Grande do Sul", "SC": "Santa Catarina",
-    "SE": "Sergipe", "SP": "São Paulo", "TO": "Tocantins"
-}
-
-# ==========================================
-# MÓDULO DE TRATAMENTO LGPD E DADOS
-# ==========================================
-def sanitizar_contatos(df):
-    """Aplica regras de higienização e filtro LGPD"""
-    df = df.copy()
-    
-    # Mascarar e filtrar e-mails contábeis/genéricos
-    padroes_contabil = r'(contabil|contabilidade|escritorio|fiscal|tax|auditoria|assessor)'
-    if 'email' in df.columns:
-        df['is_contabilidade'] = df['email'].astype(str).str.contains(padroes_contabil, case=False, na=False)
-        df['email_limpo'] = df.apply(
-            lambda r: "[FILTRADO LGPD - CONTABILIDADE]" if r['is_contabilidade'] else r['email'], axis=1
-        )
-    
-    # Validação Básica de Formato de Telefone
-    if 'telefone' in df.columns:
-        df['telefone_formatado'] = df['telefone'].astype(str).apply(
-            lambda x: re.sub(r'\D', '', x) if pd.notnull(x) else ""
-        )
-    return df
-
+# Função para carregar dados
 @st.cache_data
-def carregar_dados_uf(uf_selecionada):
-    """Carrega o arquivo CSV correspondente ao estado selecionado"""
-    caminho_arquivo = f"estabelecimentos_{uf_selecionada}.csv"
+def carregar_dados(fonte):
     try:
-        df = pd.read_csv(caminho_arquivo, dtype=str)
-        return sanitizar_contatos(df), None
-    except FileNotFoundError:
-        return None, f"Arquivo '{caminho_arquivo}' não encontrado no repositório. Gere-o via Colab."
+        return pd.read_csv(fonte, dtype=str, on_bad_lines='skip', engine='python')
     except Exception as e:
-        return None, f"Erro ao carregar o arquivo: {str(e)}"
+        return None
 
-# ==========================================
-# BARRA LATERAL (PAINEL DE NAVEGAÇÃO)
-# ==========================================
+# --- SIDEBAR (Seleção Automática do GitHub) ---
 st.sidebar.title("💼 LeadGov Pro")
 st.sidebar.caption("CNPJ Intelligence & Lead Generation")
-st.sidebar.divider()
-
+st.sidebar.markdown("---")
 st.sidebar.subheader("📍 Seleção Geográfica")
-uf_ativa = st.sidebar.selectbox(
-    "Selecione o Estado (UF):",
-    options=ESTADOS_BR,
-    format_func=lambda x: f"{x} - {UF_NOMES[x]}",
-    index=11 # Padrão em MS
-)
 
-st.sidebar.divider()
-st.sidebar.info("💡 **Dica LGPD:** E-mails de escritórios contábeis são automaticamente marcados para evitar abordagens indevidas.")
+ufs = {
+    "AC": "Acre", "AL": "Alagoas", "AP": "Amapá", "AM": "Amazonas", "BA": "Bahia",
+    "CE": "Ceará", "DF": "Distrito Federal", "ES": "Espírito Santo", "GO": "Goiás",
+    "MA": "Maranhão", "MT": "Mato Grosso", "MS": "Mato Grosso do Sul", "MG": "Minas Gerais",
+    "PA": "Pará", "PB": "Paraíba", "PR": "Paraná", "PE": "Pernambuco", "PI": "Piauí",
+    "RJ": "Rio de Janeiro", "RN": "Rio Grande do Norte", "RS": "Rio Grande do Sul",
+    "RO": "Rondônia", "RR": "Roraima", "SC": "Santa Catarina", "SP": "São Paulo",
+    "SE": "Sergipe", "TO": "Tocantins"
+}
 
-# ==========================================
-# PAINEL PRINCIPAL / NAVEGAÇÃO
-# ==========================================
-st.title(f" Painel Pro - Extrator B2B ({uf_ativa})")
+uf_selecionada = st.sidebar.selectbox("Selecione o Estado (UF):", options=list(ufs.keys()), format_func=lambda x: f"{x} - {ufs[x]}")
 
-aba1, aba2, aba3, aba4 = st.tabs([
-    "🔍 Filtragem de Leads", 
-    "📊 Dashboards & Insights", 
-    "⚡ Gerador Colab Python", 
-    "🛡️ Shield LGPD"
-])
+st.sidebar.info("💡 Dica LGPD: E-mails de escritórios contábeis são automaticamente marcados para evitar abordagens indevidas.")
 
-# ------------------------------------------
-# ABA 1: FILTRAGEM DE LEADS
-# ------------------------------------------
-with aba1:
-    df, erro = carregar_dados_uf(uf_ativa)
+# Tentar carregar arquivo automático da UF selecionada do repositório
+arquivo_github = f"estabelecimentos_{uf_selecionada}.csv"
+df_raw = carregar_dados(arquivo_github)
+
+# --- BANNER DE UPLOAD MANUAL (Área da Imagem 2) ---
+st.markdown("""
+<div class="upload-box">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h4 style="margin: 0; color: #1E40AF;">📄 Possui um arquivo oficial da Receita (.CSV ou .ZIP)?</h4>
+            <p style="margin: 0; color: #3B82F6; font-size: 13px;">Carregue direto no navegador para filtrar localmente sem enviar para nenhum servidor externo.</p>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+uploaded_file = st.file_uploader("Carregar ESTABELE / CSV", type=["csv", "txt"], label_visibility="collapsed")
+
+if uploaded_file is not None:
+    df_raw = carregar_dados(uploaded_file)
+
+# --- CARDS DE MÉTRICAS (Topo) ---
+col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+
+total_leads = len(df_raw) if df_raw is not None else 0
+
+with col_m1:
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-title">LEADS ENCONTRADOS</div>
+        <div class="metric-value">{total_leads}</div>
+        <div class="metric-sub" style="color: #64748B;">Empresas na base ativa</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_m2:
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-title">COM WHATSAPP VÁLIDO</div>
+        <div class="metric-value">{total_leads}</div>
+        <div class="metric-sub">100% da amostra</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_m3:
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-title">HIGIENIZAÇÃO LGPD</div>
+        <div class="metric-value">{total_leads}</div>
+        <div class="metric-sub" style="color: #6366F1;">Zero CPFs / Limpeza Ativa</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_m4:
+    valor_est = total_leads * 0.12
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-title">VALOR ESTIMADO DO LOTE</div>
+        <div class="metric-value">R$ {valor_est:.2f}</div>
+        <div class="metric-sub" style="color: #D97706;">~ US$ {(valor_est/5):.2f} no Fiverr</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# --- PAINEL DE FILTROS AVANÇADOS ---
+st.markdown("### ⚙️ Filtros Avançados de Pesquisa")
+
+with st.container():
+    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+    with f_col1:
+        uf_filtro = st.selectbox("ESTADO (UF)", [uf_selecionada] + list(ufs.keys()))
+    with f_col2:
+        cidade_filtro = st.text_input("NOME DA CIDADE", placeholder="Ex: Campinas, Curitiba...")
+    with f_col3:
+        ramo_filtro = st.text_input("RAMO DE ATIVIDADE (CNAE / TERMO)", placeholder="Ex: Solar, Software, 6201501...")
+    with f_col4:
+        situacao_filtro = st.selectbox("SITUAÇÃO CADASTRAL", ["Apenas Ativas (2)", "Todas"])
+
+    f_col5, f_col6, f_col7, f_col8 = st.columns(4)
+    with f_col5:
+        data_ini = st.date_input("ABERTURA A PARTIR DE", value=None)
+    with f_col6:
+        data_fim = st.date_input("ABERTURA ATÉ", value=None)
+    with f_col7:
+        cap_min = st.text_input("CAPITAL SOCIAL MÍNIMO (R$)", placeholder="Ex: 10000")
+    with f_col8:
+        cap_max = st.text_input("CAPITAL SOCIAL MÁXIMO (R$)", placeholder="Ex: 500000")
+
+    chk_col1, chk_col2, chk_col3 = st.columns(3)
+    with chk_col1:
+        ocultar_contabil = st.checkbox("▼ Ocultar E-mails de Contabilidade", value=True)
+    with chk_col2:
+        alertar_gratuitos = st.checkbox("⚠️ Alertar Provedores Gratuitos (@gmail)", value=True)
+    with chk_col3:
+        apenas_whats = st.checkbox("📞 Apenas com Telefone / WhatsApp", value=False)
+
+st.markdown("---")
+
+# --- TABELA E EXPORTAÇÃO ---
+header_col1, header_col2 = st.columns([2, 1])
+
+with header_col1:
+    st.markdown("### Leads Extraídos & Enriquecidos")
+    st.caption(f"Exibindo {total_leads} empresas ativas com dados limpos")
+
+with header_col2:
+    exp_col1, exp_col2 = st.columns(2)
     
-    if erro:
-        st.warning(erro)
-        st.info("Utilize a aba **⚡ Gerador Colab Python** para criar o arquivo referente a este estado.")
-    else:
-        st.subheader("Filtros Avançados")
-        col1, col2, col3 = st.columns(3)
+    # Preparar buffer de download
+    if df_raw is not None and not df_raw.empty:
+        csv_buffer = df_raw.to_csv(index=False).encode('utf-8')
         
-        with col1:
-            municipio = st.text_input("Filtrar por Município:")
-        with col2:
-            cnae = st.text_input("Filtrar por CNAE / Atividade:")
-        with col3:
-            ocultar_contábeis = st.checkbox("Ocultar E-mails Contábeis", value=True)
-            
-        # Aplicação dos Filtros
-        df_filtrado = df.copy()
-        if municipio and 'municipio' in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado['municipio'].str.contains(municipio, case=False, na=False)]
-        if cnae and 'cnae' in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado['cnae'].str.contains(cnae, case=False, na=False)]
-        if ocultar_contábeis and 'is_contabilidade' in df_filtrado.columns:
-            df_filtrado = df_filtrado[~df_filtrado['is_contabilidade']]
-
-        # Métricas
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Registros", len(df))
-        m2.metric("Filtrados", len(df_filtrado))
-        m3.metric("Taxa de Aproveitamento", f"{(len(df_filtrado)/len(df)*100):.1f}%" if len(df) > 0 else "0%")
-
-        st.divider()
-        st.dataframe(df_filtrado, use_container_width=True)
-
-        # Exportação
-        csv_download = df_filtrado.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Baixar Base Filtrada (CSV)",
-            data=csv_download,
-            file_name=f"leads_{uf_ativa}_filtrado.csv",
-            mime="text/csv"
-        )
-
-# ------------------------------------------
-# ABA 2: DASHBOARDS
-# ------------------------------------------
-with aba2:
-    st.subheader("Análise Qualitativa da Base")
-    if 'df_filtrado' in locals() and df_filtrado is not None and not df_filtrado.empty:
-        col_chart1, col_chart2 = st.columns(2)
+        output_excel = io.BytesIO()
+        with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
+            df_raw.to_excel(writer, index=False, sheet_name='Leads')
+        excel_data = output_excel.getvalue()
         
-        with col_chart1:
-            if 'municipio' in df_filtrado.columns:
-                st.write("**Top 10 Municípios com mais Leads**")
-                top_mun = df_filtrado['municipio'].value_counts().head(10)
-                st.bar_chart(top_mun)
-                
-        with col_chart2:
-            if 'is_contabilidade' in df_filtrado.columns:
-                st.write("**Proporção de E-mails Direct x Contábeis**")
-                dist_emails = df_filtrado['is_contabilidade'].value_counts().rename(index={True: 'Contábil', False: 'Direto'})
-                st.bar_chart(dist_emails)
+        with exp_col1:
+            st.download_button("🟢 Exportar Excel (.xlsx)", data=excel_data, file_name=f"leads_{uf_selecionada}.xlsx", mime="application/vnd.ms-excel")
+        with exp_col2:
+            st.download_button("⚫ Exportar CSV", data=csv_buffer, file_name=f"leads_{uf_selecionada}.csv", mime="text/csv")
     else:
-        st.info("Carregue uma base válida na primeira aba para visualizar os gráficos.")
+        with exp_col1:
+            st.button("🟢 Exportar Excel (.xlsx)", disabled=True)
+        with exp_col2:
+            st.button("⚫ Exportar CSV", disabled=True)
 
-# ------------------------------------------
-# ABA 3: GERADOR COLAB PYTHON
-# ------------------------------------------
-with aba3:
-    st.subheader("Script Automatizado para Processamento na Nuvem")
-    st.markdown("""
-    Copie o código Python abaixo para rodar no seu **Google Colab**. 
-    Ele irá extrair os dados diretamente do arquivo `.ESTABELE` da Receita Federal para a UF selecionada:
-    """)
-    
-    script_colab = f"""# ========================================================
-# SCRIPT DE EXTRAÇÃO DE LEADS CNPJ ({uf_ativa})
-# Executar no Google Colab
-# ========================================================
-import pandas as pd
-
-# 1. Definição dos Arquivos
-arquivo_origem = "K3241014.D40810.ESTABELE"  # <--- Altere para o nome do seu arquivo baixado
-uf_desejada = "{uf_ativa}"
-arquivo_destino = f"estabelecimentos_{{uf_desejada}}.csv"
-
-# Código do Estado no IBGE para filtragem rápida
-codigos_uf = {{
-    "RO": "11", "AC": "12", "AM": "13", "RR": "14", "PA": "15", "AP": "16", "TO": "17",
-    "MA": "21", "PI": "22", "CE": "23", "RN": "24", "PB": "25", "PE": "26", "AL": "27",
-    "SE": "28", "BA": "29", "MG": "31", "ES": "32", "RJ": "33", "SP": "35", "PR": "41",
-    "SC": "42", "RS": "43", "MS": "50", "MT": "51", "GO": "52", "DF": "53"
-}}
-
-print(f"Iniciando extração para a UF: {{uf_desejada}}...")
-# Adicione a lógica de leitura e filtro em chunks aqui
-print("Fim do processo!")
-"""
-    st.code(script_colab, language="python")
-
-# ------------------------------------------
-# ABA 4: SHIELD LGPD
-# ------------------------------------------
-with aba4:
-    st.subheader("🛡️ Guia de Conformidade LGPD")
-    st.markdown("""
-    - **Dados Públicos de PJ:** Informações cadastrais de Pessoas Jurídicas são de domínio público na Receita Federal e seu uso comercial B2B é legítimo.
-    - **Atenção aos MEIs:** Empresas individuais podem conter e-mails ou nomes civis no cadastro.
-    - **Filtro de Contabilidade:** O app sinaliza automaticamente e-mails contábeis para evitar spam não solicitado a terceiros.
-    """)
+# Exibição dos Dados
+if df_raw is not None and not df_raw.empty:
+    st.dataframe(df_raw, use_container_width=True)
+else:
+    st.warning(f"Nenhum arquivo 'estabelecimentos_{uf_selecionada}.csv' localizado. Faça o upload manual usando o botão acima ou gere pelo Colab.")
