@@ -21,7 +21,7 @@ st.markdown("""
     .stButton>button { background-color: #0066CC; color: white; border-radius: 6px; font-weight: 600; border: none; }
     .stButton>button:hover { background-color: #0052A3; }
 </style>
-""", unsafe_allow_text_gradient=True)
+""", unsafe_allow_html=True)
 
 # ==========================================
 # CONSTANTES & LISTA COMPLETA DE ESTADOS
