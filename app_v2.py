@@ -192,7 +192,7 @@ with header_col2:
         csv_buffer = df_raw.to_csv(index=False).encode('utf-8')
         
         output_excel = io.BytesIO()
-        with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
+        with pd.ExcelWriter(output_excel) as writer:
             df_raw.to_excel(writer, index=False, sheet_name='Leads')
         excel_data = output_excel.getvalue()
         
