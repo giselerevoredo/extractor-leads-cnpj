@@ -9,84 +9,60 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização CSS para recriar o tema claro/pro da Imagem 2
+# Estilização CSS para recriar o tema claro/pro
 st.markdown("""
 <style>
-    /* Fundo Geral */
-    .stApp { background-color: #F8FAFC; color: #0F172A; }
-    
-    /* Forçar Inputs, Selects e Uploader para Fundo Branco e Texto Escuro */
-    div[data-baseweb="input"] > div,
-    div[data-baseweb="select"] > div,
-    div[data-testid="stTextInput"] input,
-    div[data-testid="stDateInput"] input {
-        background-color: #FFFFFF !important;
-        color: #0F172A !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 6px !important;
-    }
+/* Fundo Geral */
+.stApp { background-color: #F8FAFC; color: #0F172A; }
 
-    /* Rótulos/Labels das Caixas de Texto para contraste alto */
-    label, p, span {
-        color: #1E293B !important;
-        font-weight: 600;
-    }
+/* Forçar Inputs, Selects e Uploader para Fundo Branco e Texto Escuro */
+div[data-baseweb="input"] > div,
+div[data-baseweb="select"] > div,
+div[data-testid="stTextInput"] input,
+div[data-testid="stDateInput"] input {
+    background-color: #FFFFFF !important;
+    color: #0F172A !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 6px !important;
+}
 
-    /* Container de Upload Claro */
-    [data-testid="stFileUploader"] {
-        background-color: #FFFFFF !important;
-        border: 1px dashed #94A3B8 !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-    }
+/* Rótulos e Labels */
+label, p, span {
+    color: #1E293B !important;
+    font-weight: 600;
+}
 
-    /* Cards de Métricas Topo */
-    .metric-card {
-        background-color: #FFFFFF;
-        padding: 16px;
-        border-radius: 10px;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-    .metric-title { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; }
-    .metric-value { font-size: 24px; font-weight: 800; color: #0F172A; margin: 4px 0; }
-    .metric-sub { font-size: 12px; color: #10B981; font-weight: 600; }
-</style>
-""", unsafe_allow_html=True)
-    
-    /* Cards de Métricas Topo */
-    .metric-card {
-        background-color: #FFFFFF;
-        padding: 16px;
-        border-radius: 10px;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-    .metric-title { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; }
-    .metric-value { font-size: 24px; font-weight: 800; color: #0F172A; margin: 4px 0; }
-    .metric-sub { font-size: 12px; color: #10B981; font-weight: 600; }
-    
-    /* Painel de Filtros */
-    .filter-box {
-        background-color: #FFFFFF;
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #E2E8F0;
-        margin-top: 15px;
-        margin-bottom: 15px;
-    }
-    
-    /* Banner de Upload */
-    .upload-box {
-        background-color: #EFF6FF;
-        border: 1px solid #BFDBFE;
-        border-radius: 10px;
-        padding: 15px 20px;
-        margin-bottom: 20px;
-    }
-    
-    /* Botões Customizados */
-    .stButton>button { border-radius: 6px; font-weight: 600; }
+/* Container de Upload Claro */
+[data-testid="stFileUploader"] {
+    background-color: #FFFFFF !important;
+    border: 1px dashed #94A3B8 !important;
+    border-radius: 8px !important;
+    padding: 10px !important;
+}
+
+/* Cards de Métricas Topo */
+.metric-card {
+    background-color: #FFFFFF;
+    padding: 16px;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.metric-title { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+.metric-value { font-size: 24px; font-weight: 800; color: #0F172A; margin: 4px 0; }
+.metric-sub { font-size: 12px; color: #10B981; font-weight: 600; }
+
+/* Banner de Upload */
+.upload-box {
+    background-color: #EFF6FF;
+    border: 1px solid #BFDBFE;
+    border-radius: 10px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+}
+
+/* Botões */
+.stButton>button { border-radius: 6px; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -95,10 +71,10 @@ st.markdown("""
 def carregar_dados(fonte):
     try:
         return pd.read_csv(fonte, dtype=str, on_bad_lines='skip', engine='python')
-    except Exception as e:
+    except Exception:
         return None
 
-# --- SIDEBAR (Seleção Automática do GitHub) ---
+# --- SIDEBAR ---
 st.sidebar.title("💼 LeadGov Pro")
 st.sidebar.caption("CNPJ Intelligence & Lead Generation")
 st.sidebar.markdown("---")
@@ -122,7 +98,7 @@ st.sidebar.info("💡 Dica LGPD: E-mails de escritórios contábeis são automat
 arquivo_github = f"estabelecimentos_{uf_selecionada}.csv"
 df_raw = carregar_dados(arquivo_github)
 
-# --- BANNER DE UPLOAD MANUAL (Área da Imagem 2) ---
+# --- BANNER DE UPLOAD MANUAL ---
 st.markdown("""
 <div class="upload-box">
     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -227,13 +203,17 @@ with header_col1:
 with header_col2:
     exp_col1, exp_col2 = st.columns(2)
     
-    # Preparar buffer de download
     if df_raw is not None and not df_raw.empty:
         csv_buffer = df_raw.to_csv(index=False).encode('utf-8')
         
         output_excel = io.BytesIO()
-        with pd.ExcelWriter(output_excel) as writer:
-            df_raw.to_excel(writer, index=False, sheet_name='Leads')
+        try:
+            with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
+                df_raw.to_excel(writer, index=False, sheet_name='Leads')
+        except Exception:
+            with pd.ExcelWriter(output_excel) as writer:
+                df_raw.to_excel(writer, index=False, sheet_name='Leads')
+                
         excel_data = output_excel.getvalue()
         
         with exp_col1:
