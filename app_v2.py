@@ -204,28 +204,22 @@ with header_col2:
     exp_col1, exp_col2 = st.columns(2)
     
     if df_raw is not None and not df_raw.empty:
+        # Gera o CSV normal
         csv_buffer = df_raw.to_csv(index=False).encode('utf-8')
         
-        output_excel = io.BytesIO()
-        try:
-            with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
-                df_raw.to_excel(writer, index=False, sheet_name='Leads')
-        except Exception:
-            with pd.ExcelWriter(output_excel) as writer:
-                df_raw.to_excel(writer, index=False, sheet_name='Leads')
-                
-        excel_data = output_excel.getvalue()
+        # Gera um arquivo compatível com Excel sem precisar de openpyxl/xlsxwriter
+        excel_csv_buffer = df_raw.to_csv(index=False, sep='\t').encode('utf-16')
         
         with exp_col1:
-            st.download_button("🟢 Exportar Excel (.xlsx)", data=excel_data, file_name=f"leads_{uf_selecionada}.xlsx", mime="application/vnd.ms-excel")
+            st.download_button("🟢 Exportar Excel", data=excel_csv_buffer, file_name=f"leads_{uf_selecionada}.xls", mime="application/vnd.ms-excel")
         with exp_col2:
             st.download_button("⚫ Exportar CSV", data=csv_buffer, file_name=f"leads_{uf_selecionada}.csv", mime="text/csv")
     else:
         with exp_col1:
-            st.button("🟢 Exportar Excel (.xlsx)", disabled=True)
+            st.button("🟢 Exportar Excel", disabled=True)
         with exp_col2:
             st.button("⚫ Exportar CSV", disabled=True)
-
+            
 # Exibição dos Dados
 if df_raw is not None and not df_raw.empty:
     st.dataframe(df_raw, use_container_width=True)
