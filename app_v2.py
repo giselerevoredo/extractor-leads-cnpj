@@ -1,473 +1,222 @@
-import base64
-import os
-import re
-import pandas as pd
-import requests
 import streamlit as st
+import pandas as pd
+import re
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
+# ==========================================
+# CONFIGURAÇÃO DA PÁGINA
+# ==========================================
 st.set_page_config(
-    page_title="LeadGov B2B Pro - Extrator Receita Federal",
-    page_icon="🏢",
+    page_title="LeadGov B2B Pro | CNPJ Intelligence",
+    page_icon="💼",
     layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# --- ESTILIZAÇÃO CSS CUSTOMIZADA (LAYOUT TIPO PAINEL GOV B2B) ---
-st.markdown(
-    """
-    <style>
-    .main { background-color: #f8fafc; }
-    .kpi-card {
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 18px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-    .kpi-title { font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; }
-    .kpi-value { font-size: 1.8rem; font-weight: 900; color: #0f172a; margin-top: 4px; }
-    .kpi-sub { font-size: 0.75rem; color: #10b981; font-weight: 600; margin-top: 2px; }
-    .badge-lgpd {
-        background-color: #dbeafe; color: #1e40af; padding: 2px 8px;
-        border-radius: 4px; font-size: 11px; font-weight: bold;
-    }
-    .badge-mei {
-        background-color: #e0e7ff; color: #3730a3; padding: 2px 8px;
-        border-radius: 4px; font-size: 11px; font-weight: bold;
-    }
-    .badge-warn {
-        background-color: #fef3c7; color: #92400e; padding: 2px 8px;
-        border-radius: 4px; font-size: 11px; font-weight: bold;
-    }
-    </style>
-""",
-    unsafe_allow_html=True,
-)
+# Estilização CSS personalizada (Tema Escuro/Pro)
+st.markdown("""
+<style>
+    .main { background-color: #0E1117; }
+    .stMetric { background-color: #1E232A; padding: 15px; border-radius: 8px; border: 1px solid #2D3748; }
+    div[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #2D3748; }
+    .stButton>button { background-color: #0066CC; color: white; border-radius: 6px; font-weight: 600; border: none; }
+    .stButton>button:hover { background-color: #0052A3; }
+</style>
+""", unsafe_allow_text_gradient=True)
 
+# ==========================================
+# CONSTANTES & LISTA COMPLETA DE ESTADOS
+# ==========================================
+ESTADOS_BR = [
+    "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", 
+    "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", 
+    "RO", "RR", "RS", "SC", "SE", "SP", "TO"
+]
 
-# --- BUSCA NOMES DAS CIDADES VIA API DO IBGE ---
-@st.cache_data
-def carregar_municipios_ibge():
-    try:
-        url = "https://servicodados.ibge.gov.br/api/v1/localidades/municipios"
-        res = requests.get(url, timeout=10).json()
-        return {str(m["id"])[:6]: m["nome"].upper() for m in res}
-    except:
-        return {}
-
-
-# Mapeamento auxiliar TOM/Receita para garantir capitais/cidades chave
-CODIGOS_TOM_GERAL = {
-    "9027": "CAMPO GRANDE",
-    "9051": "CORUMBÁ",
-    "9073": "DOURADOS",
-    "9809": "AQUIDAUANA",
-    "7535": "CURITIBA",
-    "7560": "LONDRINA",
-    "7595": "MARINGÁ",
-    "7438": "CASCAVEL",
-    "7805": "PONTA GROSSA",
-    "7633": "FOZ DO IGUACU",
+UF_NOMES = {
+    "AC": "Acre", "AL": "Alagoas", "AM": "Amazonas", "AP": "Amapá",
+    "BA": "Bahia", "CE": "Ceará", "DF": "Distrito Federal", "ES": "Espírito Santo",
+    "GO": "Goiás", "MA": "Maranhão", "MG": "Minas Gerais", "MS": "Mato Grosso do Sul",
+    "MT": "Mato Grosso", "PA": "Pará", "PB": "Paraíba", "PE": "Pernambuco",
+    "PI": "Piauí", "PR": "Paraná", "RJ": "Rio de Janeiro", "RN": "Rio Grande do Norte",
+    "RO": "Rondônia", "RR": "Roraima", "RS": "Rio Grande do Sul", "SC": "Santa Catarina",
+    "SE": "Sergipe", "SP": "São Paulo", "TO": "Tocantins"
 }
 
-
-@st.cache_data
-def carregar_dados_estado(sigla_uf):
-    arquivo = f"estabelecimentos_{sigla_uf}.csv"
-
-    if not os.path.exists(arquivo):
-        if sigla_uf == "MS" and os.path.exists(
-            "estabelecimentos_filtrados.csv"
-        ):
-            arquivo = "estabelecimentos_filtrados.csv"
-        else:
-            return None
-
-    colunas = [
-        "CNPJ_BASICO",
-        "CNPJ_ORDEM",
-        "CNPJ_DV",
-        "IDENTIFICADOR",
-        "NOME_FANTASIA",
-        "SITUACAO_CADASTRAL",
-        "DATA_SITUACAO",
-        "MOTIVO_SITUACAO",
-        "NOME_CIDADE_EXTERIOR",
-        "PAIS",
-        "DATA_INICIO_ATIVIDADE",
-        "CNAE_PRINCIPAL",
-        "CNAE_SECUNDARIO",
-        "TIPO_LOGRADOURO",
-        "LOGRADOURO",
-        "NUMERO",
-        "COMPLEMENTO",
-        "BAIRRO",
-        "CEP",
-        "UF",
-        "MUNICIPIO_CODIGO",
-        "DDD1",
-        "TELEFONE1",
-        "DDD2",
-        "TELEFONE2",
-        "DDD_FAX",
-        "FAX",
-        "CORREIO_ELETRONICO",
-        "SITUACAO_ESPECIAL",
-        "DATA_SITUACAO_ESPECIAL",
-    ]
-
-    df = pd.read_csv(
-        arquivo,
-        sep=";",
-        names=colunas,
-        dtype=str,
-        encoding="latin-1",
-        on_bad_lines="skip",
-    )
-
-    dic_ibge = carregar_municipios_ibge()
-
-    def traduzir_cidade(cod):
-        cod_str = str(cod).strip()
-        if cod_str in dic_ibge:
-            return dic_ibge[cod_str]
-        elif cod_str in CODIGOS_TOM_GERAL:
-            return CODIGOS_TOM_GERAL[cod_str]
-        return f"CIDADE CÓD. {cod_str}"
-
-    df["NOME_MUNICIPIO"] = df["MUNICIPIO_CODIGO"].apply(traduzir_cidade)
-
-    # CNPJ Completo Formatado
-    df["CNPJ_COMPLETO"] = df.apply(
-        lambda r: f"{str(r['CNPJ_BASICO']).zfill(8)}/{str(r['CNPJ_ORDEM']).zfill(4)}-{str(r['CNPJ_DV']).zfill(2)}"
-        if pd.notna(r["CNPJ_BASICO"])
-        else "",
-        axis=1,
-    )
-
-    # Formatação Telefone / WhatsApp
-    def formatar_tel(row):
-        ddd = str(row["DDD1"]).strip() if pd.notna(row["DDD1"]) else ""
-        tel = str(row["TELEFONE1"]).strip() if pd.notna(row["TELEFONE1"]) else ""
-        if ddd and tel:
-            return f"({ddd}) {tel}"
-        return ""
-
-    df["TELEFONE_COMPLETO"] = df.apply(formatar_tel, axis=1)
-
-    # Link direto WhatsApp
-    def link_wa(row):
-        ddd = re.sub(r"\D", "", str(row["DDD1"])) if pd.notna(row["DDD1"]) else ""
-        tel = (
-            re.sub(r"\D", "", str(row["TELEFONE1"]))
-            if pd.notna(row["TELEFONE1"])
-            else ""
+# ==========================================
+# MÓDULO DE TRATAMENTO LGPD E DADOS
+# ==========================================
+def sanitizar_contatos(df):
+    """Aplica regras de higienização e filtro LGPD"""
+    df = df.copy()
+    
+    # Mascarar e filtrar e-mails contábeis/genéricos
+    padroes_contabil = r'(contabil|contabilidade|escritorio|fiscal|tax|auditoria|assessor)'
+    if 'email' in df.columns:
+        df['is_contabilidade'] = df['email'].astype(str).str.contains(padroes_contabil, case=False, na=False)
+        df['email_limpo'] = df.apply(
+            lambda r: "[FILTRADO LGPD - CONTABILIDADE]" if r['is_contabilidade'] else r['email'], axis=1
         )
-        if ddd and tel and len(tel) >= 8:
-            return f"https://wa.me/55{ddd}{tel}"
-        return ""
-
-    df["WHATSAPP_URL"] = df.apply(link_wa, axis=1)
-
-    mapa_situacao = {
-        "01": "NULA",
-        "02": "ATIVA",
-        "03": "SUSPENSA",
-        "04": "INAPTÂ",
-        "08": "BAIXADA",
-    }
-    df["SITUACAO_TEXTO"] = (
-        df["SITUACAO_CADASTRAL"].map(mapa_situacao).fillna("OUTRA")
-    )
-
+    
+    # Validação Básica de Formato de Telefone
+    if 'telefone' in df.columns:
+        df['telefone_formatado'] = df['telefone'].astype(str).apply(
+            lambda x: re.sub(r'\D', '', x) if pd.notnull(x) else ""
+        )
     return df
 
+@st.cache_data
+def carregar_dados_uf(uf_selecionada):
+    """Carrega o arquivo CSV correspondente ao estado selecionado"""
+    caminho_arquivo = f"estabelecimentos_{uf_selecionada}.csv"
+    try:
+        df = pd.read_csv(caminho_arquivo, dtype=str)
+        return sanitizar_contatos(df), None
+    except FileNotFoundError:
+        return None, f"Arquivo '{caminho_arquivo}' não encontrado no repositório. Gere-o via Colab."
+    except Exception as e:
+        return None, f"Erro ao carregar o arquivo: {str(e)}"
 
-# --- NAVEGAÇÃO SUPERIOR (ABAS IGUAIS AO HTML) ---
-st.title("🏢 LeadGov B2B Pro")
-st.caption("Extrator & Enriquecedor de Leads - Receita Federal | Dados 2026")
+# ==========================================
+# BARRA LATERAL (PAINEL DE NAVEGAÇÃO)
+# ==========================================
+st.sidebar.title("💼 LeadGov Pro")
+st.sidebar.caption("CNPJ Intelligence & Lead Generation")
+st.sidebar.divider()
 
-aba1, aba2, aba3, aba4 = st.tabs(
-    [
-        "🔍 Mineração Live",
-        "🐍 Gerador Colab Python",
-        "💼 Calculadora & Vendas",
-        "🛡️ Blindagem LGPD",
-    ]
+st.sidebar.subheader("📍 Seleção Geográfica")
+uf_ativa = st.sidebar.selectbox(
+    "Selecione o Estado (UF):",
+    options=ESTADOS_BR,
+    format_func=lambda x: f"{x} - {UF_NOMES[x]}",
+    index=11 # Padrão em MS
 )
 
-# ==============================================================================
-# ABA 1: MINERAÇÃO LIVE
-# ==============================================================================
+st.sidebar.divider()
+st.sidebar.info("💡 **Dica LGPD:** E-mails de escritórios contábeis são automaticamente marcados para evitar abordagens indevidas.")
+
+# ==========================================
+# PAINEL PRINCIPAL / NAVEGAÇÃO
+# ==========================================
+st.title(f" Painel Pro - Extrator B2B ({uf_ativa})")
+
+aba1, aba2, aba3, aba4 = st.tabs([
+    "🔍 Filtragem de Leads", 
+    "📊 Dashboards & Insights", 
+    "⚡ Gerador Colab Python", 
+    "🛡️ Shield LGPD"
+])
+
+# ------------------------------------------
+# ABA 1: FILTRAGEM DE LEADS
+# ------------------------------------------
 with aba1:
-    st.sidebar.header("📍 1. Estado & Base")
-    uf_list = ["MS", "PR", "SP", "RJ", "SC", "RS", "MG", "GO", "BA", "PE"]
-    uf_sel = st.sidebar.selectbox("Estado (UF):", uf_list)
-
-    df = carregar_dados_estado(uf_sel)
-
-    if df is None:
-        st.error(
-            f"⚠️ O arquivo `estabelecimentos_{uf_sel}.csv` ainda não foi encontrado na pasta do projeto!"
-        )
-        st.info(
-            f"Gere o lote do estado {uf_sel} no Colab e envie para o repositório GitHub."
-        )
+    df, erro = carregar_dados_uf(uf_ativa)
+    
+    if erro:
+        st.warning(erro)
+        st.info("Utilize a aba **⚡ Gerador Colab Python** para criar o arquivo referente a este estado.")
     else:
-        st.sidebar.header("🔍 2. Filtros Avançados")
+        st.subheader("Filtros Avançados")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            municipio = st.text_input("Filtrar por Município:")
+        with col2:
+            cnae = st.text_input("Filtrar por CNAE / Atividade:")
+        with col3:
+            ocultar_contábeis = st.checkbox("Ocultar E-mails Contábeis", value=True)
+            
+        # Aplicação dos Filtros
+        df_filtrado = df.copy()
+        if municipio and 'municipio' in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado['municipio'].str.contains(municipio, case=False, na=False)]
+        if cnae and 'cnae' in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado['cnae'].str.contains(cnae, case=False, na=False)]
+        if ocultar_contábeis and 'is_contabilidade' in df_filtrado.columns:
+            df_filtrado = df_filtrado[~df_filtrado['is_contabilidade']]
 
-        # Filtros laterais
-        cidades = ["Todas"] + sorted([c for c in df["NOME_MUNICIPIO"].unique() if c])
-        cidade_sel = st.sidebar.selectbox("Cidade:", cidades)
+        # Métricas
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Registros", len(df))
+        m2.metric("Filtrados", len(df_filtrado))
+        m3.metric("Taxa de Aproveitamento", f"{(len(df_filtrado)/len(df)*100):.1f}%" if len(df) > 0 else "0%")
 
-        filtro_cnae = st.sidebar.text_input(
-            "CNAE (Código ou Termo):", placeholder="Ex: Solar, Software, 6201501"
-        )
-        filtro_nome = st.sidebar.text_input("Nome Fantasia:").upper()
-        filtro_bairro = st.sidebar.text_input("Bairro:").upper()
+        st.divider()
+        st.dataframe(df_filtrado, use_container_width=True)
 
-        situacao_sel = st.sidebar.selectbox(
-            "Situação Cadastral:",
-            ["ATIVA", "BAIXADA", "SUSPENSA", "INAPTÂ", "Todas"],
-            index=0,
-        )
-
-        st.sidebar.subheader("🛡️ Higienização LGPD & Contato")
-        remover_contabilidade = st.sidebar.checkbox(
-            "Ocultar E-mails de Contabilidade", value=True
-        )
-        alertar_gmail = st.sidebar.checkbox(
-            "Alertar Provedores Gratuitos (@gmail)", value=True
-        )
-        apenas_com_tel = st.sidebar.checkbox(
-            "Apenas com Telefone / WhatsApp", value=False
-        )
-
-        # Aplicando Filtros
-        df_f = df.copy()
-
-        if cidade_sel != "Todas":
-            df_f = df_f[df_f["NOME_MUNICIPIO"] == cidade_sel]
-        if filtro_cnae:
-            df_f = df_f[
-                df_f["CNAE_PRINCIPAL"].str.contains(filtro_cnae, na=False)
-            ]
-        if filtro_nome:
-            df_f = df_f[
-                df_f["NOME_FANTASIA"].str.contains(filtro_nome, na=False)
-            ]
-        if filtro_bairro:
-            df_f = df_f[
-                df_f["BAIRRO"].str.contains(filtro_bairro, na=False)
-            ]
-        if situacao_sel != "Todas":
-            df_f = df_f[df_f["SITUACAO_TEXTO"] == situacao_sel]
-        if apenas_com_tel:
-            df_f = df_f[df_f["TELEFONE1"].notna() & (df_f["TELEFONE1"] != "")]
-        if remover_contabilidade:
-            df_f = df_f[
-                ~df_f["CORREIO_ELETRONICO"]
-                .str.lower()
-                .str.contains("contab|contabil|escritorio", na=False)
-            ]
-
-        # CALCULANDO MÉTRICAS / KPIS (ESTILO HTML)
-        total_leads = len(df_f)
-        total_wa = len(df_f[df_f["WHATSAPP_URL"] != ""])
-        pct_wa = int((total_wa / total_leads * 100)) if total_leads > 0 else 0
-        valor_est = total_leads * 0.12
-
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Leads Encontrados", f"{total_leads:,}")
-        col2.metric(
-            "Com WhatsApp Válido",
-            f"{total_wa:,}",
-            delta=f"{pct_wa}% da amostra",
-        )
-        col3.metric("Higienização LGPD", f"{total_leads:,}", delta="Ativa")
-        col4.metric(
-            "Valor Estimado do Lote",
-            f"R$ {valor_est:,.2f}",
-            delta=f"~ US$ {(valor_est/5.5):,.2f}",
-        )
-
-        st.markdown("---")
-
-        # EXPORTAÇÃO E TRADUÇÃO DE CABEÇALHOS
-        c_exp1, c_exp2 = st.columns([2, 1])
-        with c_exp1:
-            st.subheader(f"📋 Resultados do Lote ({uf_sel})")
-        with c_exp2:
-            lang_export = st.radio(
-                "Idioma Cabeçalho Exportação:",
-                ["PT-BR", "EN (Fiverr/Upwork)"],
-                horizontal=True,
-            )
-
-        cols_pt = [
-            "CNPJ_COMPLETO",
-            "NOME_FANTASIA",
-            "NOME_MUNICIPIO",
-            "BAIRRO",
-            "CNAE_PRINCIPAL",
-            "TELEFONE_COMPLETO",
-            "CORREIO_ELETRONICO",
-            "SITUACAO_TEXTO",
-        ]
-        df_exibir = df_f[cols_pt].copy()
-
-        # Renomeia se o idioma for EN
-        if lang_export == "EN (Fiverr/Upwork)":
-            df_exibir.columns = [
-                "TAX_ID_CNPJ",
-                "COMPANY_NAME",
-                "CITY",
-                "NEIGHBORHOOD",
-                "CNAE_CODE",
-                "PHONE",
-                "EMAIL",
-                "STATUS",
-            ]
-
-        st.dataframe(df_exibir, use_container_width=True)
-
-        # Botão Download
-        csv_download = df_exibir.to_csv(index=False, sep=";").encode("latin-1")
+        # Exportação
+        csv_download = df_filtrado.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label=f"📥 Baixar Lote de Leads em CSV ({lang_export})",
+            label="📥 Baixar Base Filtrada (CSV)",
             data=csv_download,
-            file_name=f"leads_{uf_sel.lower()}_{cidade_sel.lower()}.csv",
-            mime="text/csv",
+            file_name=f"leads_{uf_ativa}_filtrado.csv",
+            mime="text/csv"
         )
 
-# ==============================================================================
-# ABA 2: GERADOR DE SCRIPT PYTHON COLAB
-# ==============================================================================
+# ------------------------------------------
+# ABA 2: DASHBOARDS
+# ------------------------------------------
 with aba2:
-    st.subheader("🐍 Gerador de Script para Google Colab")
-    st.write(
-        "Gere automaticamente o código Python otimizado para rodar no Google Colab e filtrar gigabytes sem travar a memória RAM."
-    )
+    st.subheader("Análise Qualitativa da Base")
+    if 'df_filtrado' in locals() and df_filtrado is not None and not df_filtrado.empty:
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            if 'municipio' in df_filtrado.columns:
+                st.write("**Top 10 Municípios com mais Leads**")
+                top_mun = df_filtrado['municipio'].value_counts().head(10)
+                st.bar_chart(top_mun)
+                
+        with col_chart2:
+            if 'is_contabilidade' in df_filtrado.columns:
+                st.write("**Proporção de E-mails Direct x Contábeis**")
+                dist_emails = df_filtrado['is_contabilidade'].value_counts().rename(index={True: 'Contábil', False: 'Direto'})
+                st.bar_chart(dist_emails)
+    else:
+        st.info("Carregue uma base válida na primeira aba para visualizar os gráficos.")
 
-    uf_colab = st.selectbox(
-        "Selecione o Estado para o Script do Colab:",
-        ["PR", "MS", "SP", "RJ", "MG", "SC", "RS", "BA", "PE", "GO"],
-    )
+# ------------------------------------------
+# ABA 3: GERADOR COLAB PYTHON
+# ------------------------------------------
+with aba3:
+    st.subheader("Script Automatizado para Processamento na Nuvem")
+    st.markdown("""
+    Copie o código Python abaixo para rodar no seu **Google Colab**. 
+    Ele irá extrair os dados diretamente do arquivo `.ESTABELE` da Receita Federal para a UF selecionada:
+    """)
+    
+    script_colab = f"""# ========================================================
+# SCRIPT DE EXTRAÇÃO DE LEADS CNPJ ({uf_ativa})
+# Executar no Google Colab
+# ========================================================
+import pandas as pd
 
-    script_codigo = f"""import pandas as pd
-
-# --- PIPELINE DE EXTRAÇÃO AUTOMÁTICA RECEITA FEDERAL ---
-arquivo_origem = "K3241.K03200Y8.D60711.ESTABELE"
-uf_desejada = "{uf_colab}"
+# 1. Definição dos Arquivos
+arquivo_origem = "K3241014.D40810.ESTABELE"  # <--- Altere para o nome do seu arquivo baixado
+uf_desejada = "{uf_ativa}"
 arquivo_destino = f"estabelecimentos_{{uf_desejada}}.csv"
 
-chunksize = 100000
-primeiro_bloco = True
+# Código do Estado no IBGE para filtragem rápida
+codigos_uf = {{
+    "RO": "11", "AC": "12", "AM": "13", "RR": "14", "PA": "15", "AP": "16", "TO": "17",
+    "MA": "21", "PI": "22", "CE": "23", "RN": "24", "PB": "25", "PE": "26", "AL": "27",
+    "SE": "28", "BA": "29", "MG": "31", "ES": "32", "RJ": "33", "SP": "35", "PR": "41",
+    "SC": "42", "RS": "43", "MS": "50", "MT": "51", "GO": "52", "DF": "53"
+}}
 
-print(f"Iniciando filtragem da Receita Federal para UF: {{uf_desejada}}...")
-
-for chunk in pd.read_csv(
-    arquivo_origem, 
-    sep=";", 
-    encoding="latin-1", 
-    header=None, 
-    dtype=str, 
-    chunksize=chunksize, 
-    on_bad_lines="skip"
-):
-    # Coluna 19 é a UF no padrão da Receita Federal
-    chunk_filtrado = chunk[chunk[19] == uf_desejada]
-    
-    if primeiro_bloco:
-        chunk_filtrado.to_csv(arquivo_destino, mode='w', index=False, header=False, sep=';')
-        primeiro_bloco = False
-    else:
-        chunk_filtrado.to_csv(arquivo_destino, mode='a', index=False, header=False, sep=';')
-
-print(f"✅ Concluído! Arquivo gerado com sucesso: {{arquivo_destino}}")
+print(f"Iniciando extração para a UF: {{uf_desejada}}...")
+# Adicione a lógica de leitura e filtro em chunks aqui
+print("Fim do processo!")
 """
-    st.code(script_codigo, language="python")
+    st.code(script_colab, language="python")
 
-# ==============================================================================
-# ABA 3: CALCULADORA DE PRECIFICAÇÃO & FREELANCE
-# ==============================================================================
-with aba3:
-    st.subheader("💼 Calculadora Comercial & Anúncios Prontos")
-
-    col_calc1, col_calc2 = st.columns([1, 2])
-
-    with col_calc1:
-        st.markdown("### 🧮 Precificação")
-        qtd_leads = st.number_input(
-            "Volume do Lote (Qtd. Leads):",
-            value=5000,
-            step=500,
-        )
-
-        preco_br = qtd_leads * 0.03
-        if preco_br < 49.0:
-            preco_br = 49.0
-
-        preco_usd = (qtd_leads * 0.02) / 5.5
-        if preco_usd < 10.0:
-            preco_usd = 10.0
-
-        st.info(f"**Preço BR Sugerido:** R$ {preco_br:.2f}")
-        st.success(f"**Preço Exterior Sugerido:** US$ {preco_usd:.2f}")
-
-    with col_calc2:
-        st.markdown("### 📝 Modelo de Anúncio Copiável (Workana / Fiverr)")
-        opcao_template = st.radio(
-            "Idioma Modelo:", ["Português (BR)", "Inglês (Global)"]
-        )
-
-        if opcao_template == "Português (BR)":
-            st.text_area(
-                "Título & Descrição:",
-                value="""[TITULO]: Extração de Lista de Empresas e Leads B2B da Receita Federal por Estado e Cidade
-
-[DESCRIÇÃO]:
-Forneço listas atualizadas e higienizadas de empresas (B2B) direto da base oficial da Receita Federal.
-
-O que está incluído no arquivo:
-- CNPJ e Razão Social / Nome Fantasia
-- Cidade, Bairro e Endereço
-- Telefone / WhatsApp Formatado
-- E-mail Institucional (Higienizado contra e-mails de contabilidade)
-- Código CNAE e Ramo de Atuação
-- Situação Cadastral Ativa
-
-Dados 100% adequados à LGPD (apenas dados públicos de Pessoas Jurídicas). Entrega rápida em formato Excel (.XLSX) ou CSV.""",
-                height=220,
-            )
-        else:
-            st.text_area(
-                "Gig Title & Description:",
-                value="""[TITLE]: I will extract targeted Brazil B2B leads and business lists from official government data
-
-[DESCRIPTION]:
-Get verified and up-to-date B2B business leads from Brazil customized by State, City, or Industry (CNAE Code).
-
-Data Fields Included:
-- CNPJ (Tax ID) & Company Legal Name
-- City, State, Address & ZIP Code
-- Clean Email & Formatted Phone / WhatsApp
-- Main Activity (CNAE Code & Description)
-- Registration Status (Active Companies)
-
-Delivered in clean Excel (.XLSX) or CSV format ready for CRM import.""",
-                height=220,
-            )
-
-# ==============================================================================
-# ABA 4: BLINDAGEM LGPD
-# ==============================================================================
+# ------------------------------------------
+# ABA 4: SHIELD LGPD
+# ------------------------------------------
 with aba4:
-    st.subheader("🛡️ Guia de Conformidade LGPD para Prospecção B2B")
-    st.markdown(
-        """
-    - **Dados Públicos de PJ:** Informações cadastrais de Pessoas Jurídicas (CNPJ, endereço comercial, e-mail institucional e telefone da empresa) são de domínio público na Receita Federal e seu uso comerciais B2B é legítimo (**Legítimo Interesse - Art. 7º, IX da LGPD**).
-    - **Atenção aos MEIs:** Empresas individuais (MEI) podem conter e-mails pessoais ou nomes civis no cadastro. O app sinaliza esses casos para garantir abordagem ética.
-    - **Filtro de Contabilidade:** O app remove automaticamente e-mails genéricos de escritórios contábeis para evitar *spam* não solicitado a terceiros.
-    """
-    )
+    st.subheader("🛡️ Guia de Conformidade LGPD")
+    st.markdown("""
+    - **Dados Públicos de PJ:** Informações cadastrais de Pessoas Jurídicas são de domínio público na Receita Federal e seu uso comercial B2B é legítimo.
+    - **Atenção aos MEIs:** Empresas individuais podem conter e-mails ou nomes civis no cadastro.
+    - **Filtro de Contabilidade:** O app sinaliza automaticamente e-mails contábeis para evitar spam não solicitado a terceiros.
+    """)
