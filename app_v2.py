@@ -9,7 +9,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização CSS para Visual Claro e Colorido
+# Estilização CSS para Visual Claro, Colorido e Header do App em Azul
 st.markdown("""
 <style>
 /* Fundo Geral */
@@ -22,6 +22,30 @@ st.markdown("""
 section[data-testid="stSidebar"] {
     background-color: #FFFFFF !important;
     border-right: 1px solid #E5E7EB;
+}
+
+/* Container do Header do App na Sidebar (Azul com letras brancas) */
+.app-header-box {
+    background: linear-gradient(135deg, #1E40AF 0%, #2563EB 100%);
+    padding: 16px 20px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+}
+
+.app-header-box h1 {
+    color: #FFFFFF !important;
+    font-size: 24px !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.app-header-box p {
+    color: #DBEAFE !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    margin: 4px 0 0 0 !important;
 }
 
 /* Campos de entrada e selects */
@@ -78,9 +102,13 @@ def carregar_dados(fonte):
         return None
 
 # --- SIDEBAR ---
-st.sidebar.title("💼 LeadGov Pro")
-st.sidebar.caption("CNPJ Intelligence & Lead Generation")
-st.sidebar.markdown("---")
+st.sidebar.markdown("""
+<div class="app-header-box">
+    <h1>💼 LeadGov Pro</h1>
+    <p>CNPJ Intelligence & Lead Generation</p>
+</div>
+""", unsafe_allow_html=True)
+
 st.sidebar.subheader("📍 Seleção Geográfica")
 
 ufs = {
@@ -186,7 +214,11 @@ if df_filtrado is not None and not df_filtrado.empty:
     if ocultar_contabil and 'CORREIO_ELETRONICO' in df_filtrado.columns:
         df_filtrado = df_filtrado[~df_filtrado['CORREIO_ELETRONICO'].str.contains("contab|contador|escritorio", case=False, na=False)]
 
-    # 7. Data de Abertura a partir de
+    # 7. Higienização LGPD
+    if 'NOME_FANTASIA' in df_filtrado.columns:
+        df_filtrado = df_filtrado[~df_filtrado['NOME_FANTASIA'].str.contains(r'\b\d{11}\b|\b\d{3}\.\d{3}\.\d{3}-\d{2}\b', case=False, na=False, regex=True)]
+
+    # 8. Data de Abertura a partir de
     if data_ini and 'DATA_INICIO_ATIVIDADE' in df_filtrado.columns:
         df_filtrado['dt_temp'] = pd.to_datetime(df_filtrado['DATA_INICIO_ATIVIDADE'], format='%d/%m/%Y', errors='coerce')
         df_filtrado = df_filtrado[df_filtrado['dt_temp'] >= pd.to_datetime(data_ini)]
