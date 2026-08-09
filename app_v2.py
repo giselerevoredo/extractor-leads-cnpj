@@ -9,50 +9,63 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilização CSS para o tema
+# Estilização CSS para Visual Claro e Colorido
 st.markdown("""
 <style>
-.stApp { background-color: #F8FAFC; color: #0F172A; }
+/* Fundo Geral */
+.stApp { 
+    background-color: #F3F4F6; 
+    color: #1F2937; 
+}
 
+/* Sidebar Clara */
+section[data-testid="stSidebar"] {
+    background-color: #FFFFFF !important;
+    border-right: 1px solid #E5E7EB;
+}
+
+/* Campos de entrada e selects */
 div[data-baseweb="input"] > div,
 div[data-baseweb="select"] > div,
 div[data-testid="stTextInput"] input,
 div[data-testid="stDateInput"] input {
     background-color: #FFFFFF !important;
-    color: #0F172A !important;
-    border: 1px solid #CBD5E1 !important;
-    border-radius: 6px !important;
-}
-
-label, p, span { color: #1E293B !important; font-weight: 600; }
-
-[data-testid="stFileUploader"] {
-    background-color: #FFFFFF !important;
-    border: 1px dashed #94A3B8 !important;
+    color: #1F2937 !important;
+    border: 1px solid #D1D5DB !important;
     border-radius: 8px !important;
-    padding: 10px !important;
 }
 
-.metric-card {
-    background-color: #FFFFFF;
-    padding: 16px;
-    border-radius: 10px;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+label, p, span { 
+    color: #374151 !important; 
+    font-weight: 600; 
 }
-.metric-title { font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; }
-.metric-value { font-size: 24px; font-weight: 800; color: #0F172A; margin: 4px 0; }
-.metric-sub { font-size: 12px; color: #10B981; font-weight: 600; }
 
+/* Banner de Upload */
 .upload-box {
-    background-color: #EFF6FF;
-    border: 1px solid #BFDBFE;
-    border-radius: 10px;
-    padding: 15px 20px;
+    background: linear-gradient(135deg, #E0F2FE 0%, #EFF6FF 100%);
+    border: 1px solid #93C5FD;
+    border-radius: 12px;
+    padding: 16px 20px;
     margin-bottom: 20px;
 }
 
-.stButton>button { border-radius: 6px; font-weight: 600; }
+/* Cards de Métricas Coloridos */
+.metric-card {
+    padding: 18px;
+    border-radius: 12px;
+    color: #FFFFFF;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+.card-blue { background: linear-gradient(135deg, #2563EB, #1D4ED8); }
+.card-green { background: linear-gradient(135deg, #059669, #047857); }
+.card-purple { background: linear-gradient(135deg, #7C3AED, #6D28D9); }
+.card-amber { background: linear-gradient(135deg, #D97706, #B45309); }
+
+.metric-title { font-size: 11px; font-weight: 700; text-transform: uppercase; opacity: 0.9; color: #FFFFFF !important; }
+.metric-value { font-size: 26px; font-weight: 800; margin: 4px 0; color: #FFFFFF !important; }
+.metric-sub { font-size: 12px; opacity: 0.9; color: #FFFFFF !important; font-weight: 500; }
+
+.stButton>button { border-radius: 8px; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -93,8 +106,8 @@ st.markdown("""
 <div class="upload-box">
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
-            <h4 style="margin: 0; color: #1E40AF;">📄 Possui um arquivo oficial da Receita (.CSV ou .ZIP)?</h4>
-            <p style="margin: 0; color: #3B82F6; font-size: 13px;">Carregue direto no navegador para filtrar localmente sem enviar para nenhum servidor externo.</p>
+            <h4 style="margin: 0; color: #1E40AF;">📄 Importar Arquivo de Dados (.CSV ou .ZIP)</h4>
+            <p style="margin: 0; color: #2563EB; font-size: 13px;">Carregue sua base localmente para processamento ultra-rápido.</p>
         </div>
     </div>
 </div>
@@ -109,26 +122,29 @@ if uploaded_file is not None:
 st.markdown("### ⚙️ Filtros Avançados de Pesquisa")
 
 with st.container():
+    # Primeira linha de filtros
     f_col1, f_col2, f_col3, f_col4 = st.columns(4)
     with f_col1:
         uf_filtro = st.selectbox("ESTADO (UF)", ["TODOS"] + list(ufs.keys()))
     with f_col2:
-        cidade_filtro = st.text_input("NOME DA CIDADE", placeholder="Ex: Campinas, Cruz Alta...")
+        cidade_filtro = st.text_input("NOME DA CIDADE (LOCALIDADE)", placeholder="Ex: Cruz Alta, SP...")
     with f_col3:
-        ramo_filtro = st.text_input("RAMO DE ATIVIDADE (CNAE/TERMO)", placeholder="Ex: Marcenaria, Solar...")
+        ramo_filtro = st.text_input("RAMO DE ATIVIDADE (CNAE/TERMO)", placeholder="Ex: Móveis, Solar...")
     with f_col4:
-        situacao_filtro = st.selectbox("SITUAÇÃO CADASTRAL", ["Apenas Ativas (2)", "Todas"])
+        situacao_filtro = st.selectbox("SITUAÇÃO CADASTRAL", [
+            "Apenas Ativas (2)", 
+            "Baixadas (8)", 
+            "Suspensas / Inaptas", 
+            "Todas"
+        ])
 
-    f_col5, f_col6, f_col7, f_col8 = st.columns(4)
+    # Segunda linha de filtros
+    f_col5, _ = st.columns([1, 3])
     with f_col5:
-        data_ini = st.date_input("ABERTURA A PARTIR DE", value=None)
-    with f_col6:
-        data_fim = st.date_input("ABERTURA ATÉ", value=None)
-    with f_col7:
-        cap_min = st.text_input("CAPITAL SOCIAL MÍNIMO (R$)", placeholder="Ex: 10000")
-    with f_col8:
-        cap_max = st.text_input("CAPITAL SOCIAL MÁXIMO (R$)", placeholder="Ex: 500000")
+        data_ini = st.date_input("ABERTURA A PARTIR DE (DATA DE INÍCIO)", value=None)
 
+    # Caixas de Seleção
+    st.markdown("<br>", unsafe_allow_html=True)
     chk_col1, chk_col2, chk_col3 = st.columns(3)
     with chk_col1:
         ocultar_contabil = st.checkbox("▼ Ocultar E-mails de Contabilidade", value=False)
@@ -154,8 +170,13 @@ if df_filtrado is not None and not df_filtrado.empty:
         df_filtrado = df_filtrado[df_filtrado['ATIVIDADE_CNAE'].str.contains(ramo_filtro, case=False, na=False)]
 
     # 4. Filtro de Situação Cadastral
-    if situacao_filtro == "Apenas Ativas (2)" and 'SITUACAO_CADASTRAL' in df_filtrado.columns:
-        df_filtrado = df_filtrado[df_filtrado['SITUACAO_CADASTRAL'].isin(['02', '2', 2, 'ATIVA', 'Ativa'])]
+    if 'SITUACAO_CADASTRAL' in df_filtrado.columns:
+        if situacao_filtro == "Apenas Ativas (2)":
+            df_filtrado = df_filtrado[df_filtrado['SITUACAO_CADASTRAL'].isin(['02', '2', 2, 'ATIVA', 'Ativa'])]
+        elif situacao_filtro == "Baixadas (8)":
+            df_filtrado = df_filtrado[df_filtrado['SITUACAO_CADASTRAL'].isin(['08', '8', 8, 'BAIXADA', 'Baixada'])]
+        elif situacao_filtro == "Suspensas / Inaptas":
+            df_filtrado = df_filtrado[df_filtrado['SITUACAO_CADASTRAL'].isin(['01', '1', '03', '3', '04', '4', 'SUSPENSA', 'INAPTA'])]
 
     # 5. Filtro de Telefone
     if apenas_whats and 'TELEFONE' in df_filtrado.columns:
@@ -165,31 +186,29 @@ if df_filtrado is not None and not df_filtrado.empty:
     if ocultar_contabil and 'CORREIO_ELETRONICO' in df_filtrado.columns:
         df_filtrado = df_filtrado[~df_filtrado['CORREIO_ELETRONICO'].str.contains("contab|contador|escritorio", case=False, na=False)]
 
-    # 7. Datas de Abertura
-    if 'DATA_INICIO_ATIVIDADE' in df_filtrado.columns:
+    # 7. Data de Abertura a partir de
+    if data_ini and 'DATA_INICIO_ATIVIDADE' in df_filtrado.columns:
         df_filtrado['dt_temp'] = pd.to_datetime(df_filtrado['DATA_INICIO_ATIVIDADE'], format='%d/%m/%Y', errors='coerce')
-        if data_ini:
-            df_filtrado = df_filtrado[df_filtrado['dt_temp'] >= pd.to_datetime(data_ini)]
-        if data_fim:
-            df_filtrado = df_filtrado[df_filtrado['dt_temp'] <= pd.to_datetime(data_fim)]
+        df_filtrado = df_filtrado[df_filtrado['dt_temp'] >= pd.to_datetime(data_ini)]
         df_filtrado = df_filtrado.drop(columns=['dt_temp'])
 
-# --- CARDS DE MÉTRICAS ---
+# --- CARDS DE MÉTRICAS COLORIDOS ---
+st.markdown("<br>", unsafe_allow_html=True)
 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
 total_leads = len(df_filtrado) if df_filtrado is not None else 0
 
 with col_m1:
     st.markdown(f"""
-    <div class="metric-card">
+    <div class="metric-card card-blue">
         <div class="metric-title">LEADS ENCONTRADOS</div>
         <div class="metric-value">{total_leads}</div>
-        <div class="metric-sub" style="color: #64748B;">Empresas filtradas</div>
+        <div class="metric-sub">Empresas filtradas</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col_m2:
     st.markdown(f"""
-    <div class="metric-card">
+    <div class="metric-card card-green">
         <div class="metric-title">COM WHATSAPP VÁLIDO</div>
         <div class="metric-value">{total_leads}</div>
         <div class="metric-sub">100% da amostra</div>
@@ -198,20 +217,20 @@ with col_m2:
 
 with col_m3:
     st.markdown(f"""
-    <div class="metric-card">
+    <div class="metric-card card-purple">
         <div class="metric-title">HIGIENIZAÇÃO LGPD</div>
         <div class="metric-value">{total_leads}</div>
-        <div class="metric-sub" style="color: #6366F1;">Zero CPFs / Limpeza Ativa</div>
+        <div class="metric-sub">Zero CPFs / Limpeza Ativa</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col_m4:
     valor_est = total_leads * 0.12
     st.markdown(f"""
-    <div class="metric-card">
+    <div class="metric-card card-amber">
         <div class="metric-title">VALOR ESTIMADO DO LOTE</div>
         <div class="metric-value">R$ {valor_est:.2f}</div>
-        <div class="metric-sub" style="color: #D97706;">~ US$ {(valor_est/5):.2f} no Fiverr</div>
+        <div class="metric-sub">~ US$ {(valor_est/5):.2f} no Fiverr</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -222,7 +241,7 @@ header_col1, header_col2 = st.columns([2, 1])
 
 with header_col1:
     st.markdown("### Leads Extraídos & Enriquecidos")
-    st.caption(f"Exibindo {total_leads} empresas ativas com dados limpos")
+    st.caption(f"Exibindo {total_leads} empresas com dados limpos")
 
 with header_col2:
     exp_col1, exp_col2 = st.columns(2)
@@ -241,10 +260,10 @@ with header_col2:
         with exp_col2:
             st.button("⚫ Exportar CSV", disabled=True)
 
-# Exibição dos Dados Filtrados
+# Exibição dos Dados
 if df_filtrado is not None and not df_filtrado.empty:
     st.dataframe(df_filtrado, use_container_width=True)
 elif df_raw is not None:
-    st.info("Nenhuma empresa encontrada para os filtros aplicados. Tente redefinir a busca.")
+    st.info("Nenhuma empresa encontrada para os filtros aplicados.")
 else:
     st.warning("Nenhum arquivo carregado.")
